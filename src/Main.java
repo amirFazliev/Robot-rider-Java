@@ -1,22 +1,61 @@
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.*;
 
 public class Main {
     public static final Map<Integer, Integer> sizeToFreq = new HashMap<>();
     static int COUNT_TREAD = 1000;
 
-    public static void main(String[] args) throws ExecutionException, InterruptedException {
+    public static void main(String[] args) throws ExecutionException, InterruptedException, Exception {
 
-        final ExecutorService threadPool = Executors.newFixedThreadPool(COUNT_TREAD);
+        Thread thread = new Thread(() -> {
+            try {
+                synchronized (sizeToFreq){
 
-        for (int i = 0; i<COUNT_TREAD; i++) {
-            Callable<Map<Integer, Integer>> mapCallable = new MyCallable(sizeToFreq);
-            threadPool.submit(mapCallable);
+                    while (!Thread.interrupted()) {
+                        sizeToFreq.wait();
+                        int maxSizeValue = 0;
+                        int maxSizeKey = 0;
+                        Set<Integer> keySetMap = sizeToFreq.keySet();
+                        for (Integer integer : keySetMap) {
+                            if (sizeToFreq.get(integer) > maxSizeValue) {
+                                maxSizeValue = sizeToFreq.get(integer);
+                                maxSizeKey = integer;
+                            }
+                        }
+                        System.out.println("Самое частое промежуточное количество повторений " + maxSizeKey + " (встретилось " + maxSizeValue + " раз)");
+                    }
+                }
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        });
+        thread.start();
+
+
+        for (int i = 0; i < COUNT_TREAD; i++) {
+            Thread threadPool = new Thread(() -> {
+                synchronized (Main.sizeToFreq) {
+                    String text = Main.generateRoute("RLRFR", 100);
+                    int valueTotal = 0;
+                    for (int k = 0; k < text.length(); k++) {
+                        if ("R".equals(text.substring(k, k + 1))) {
+                            valueTotal++;
+                        }
+                    }
+
+                    if (Main.sizeToFreq.containsKey(valueTotal)) {
+                        Main.sizeToFreq.put(valueTotal, Main.sizeToFreq.get(valueTotal) + 1);
+                    } else {
+                        Main.sizeToFreq.put(valueTotal, 1);
+                    }
+                    Main.sizeToFreq.notify();
+                }
+            });
+            threadPool.start();
+            threadPool.join();
+            threadPool.interrupt();
         }
-        threadPool.shutdown();
+        thread.interrupt();
 
         int maxSizeValue = 0;
         int maxSizeKey = 0;
@@ -27,12 +66,13 @@ public class Main {
                 maxSizeKey = integer;
             }
         }
-        sizeToFreq.remove(maxSizeKey, maxSizeValue);
 
         System.out.println("Самое частое количество повторений " + maxSizeKey + " (встретилось " + maxSizeValue + " раз)");
         System.out.println("Другие размеры:");
         for (Integer integer : sizeToFreq.keySet()) {
-            System.out.println("- " + integer + " (" + sizeToFreq.get(integer) + " раз)");
+            if(maxSizeKey != integer) {
+                System.out.println("- " + integer + " (" + sizeToFreq.get(integer) + " раз)");
+            }
         }
     }
 
